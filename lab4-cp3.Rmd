@@ -17,6 +17,7 @@ Logo abaixo temos a leitura/filtragem dos dados e importação de bibliotecas qu
 ```{r}
 
 library('tidyverse')
+library('coin')
 library('boot')
 library('resample')
 library('ggplot2')
@@ -129,7 +130,41 @@ Agora podemos guardar as diferenças observadas na nossa amostra.
 
 ```{r}
 count_genres.diff = diff(count_genres$prop)
+
+
+set.seed(1)
+diffs = replicate(1000, {
+
+  amostra = amostra %>% 
+    mutate(id_embaralhado = sample(genre, n())) %>% 
+    group_by(id_embaralhado)
+  
+  
+  count_genres_2 <- plyr::count(amostra, 'genre') %>% mutate(prop = freq / (sum(freq)))
+  
+  
+  return(count_genres_2$prop[1] - count_genres_2$prop[4]) #acao e comedia
+})
+
+
+glimpse(diffs)
+
+tibble(diferenca = diffs) %>% 
+  ggplot(aes(x = diferenca)) + 
+  geom_histogram(bins = 30) + 
+  geom_vline(xintercept = count_genres$prop[1] - count_genres$prop[4])
+
+# p-valor!
+sum(abs(diffs) >= abs(diff.media.observada.1x4)) / length(diffs)
+
+
+
 ```
 
+<h3>Pergunta 2: Qual o gênero de filme é o melhor?</h3>
+Assim como com intervalos de confiança, a estatítica que utilizaremos é a media.
 
+```{r}
+permutationTest2(data = amostra, statistic = mean(rating), treatment = genre)
+```
 
