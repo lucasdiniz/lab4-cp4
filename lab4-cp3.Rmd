@@ -5,6 +5,7 @@ output: html_document
 ---
 
 #Analisando a popularidade de filmes
+
 Nesta análise iremos explorar e analisar uma *amostra* de dados sobre ratings de filmes no site movielens. Cada observação dos dados corresponde a uma nota dada por um usuário do site para um certo filme e contém as seguintes variáveis.
 
 _rating_: Rating dado por um usuário para o filme em questão.<br>
@@ -30,12 +31,15 @@ dados = full_join(ratings, movies, by = "movieId")
 dados <- cSplit(dados, "genres", "|", "long") %>% mutate(genre = genres) %>% select(-timestamp, -movieId, -userId, -genres)
 ```
 
+<h2>Intervalos de confiança</h2>
+Primeiramente vamos utilizar a abordagem de estimar intervalos de confiança para responder duas perguntas, e em seguida iremos utilizar testes de hipótese e comparar os resultados obtidos.
+
 Com base nesses dados, vamos responder duas perguntas, a primeira delas é:
 
-<h2>Pergunta 1: Qual o gênero de filme mais popular?</h2>
+<h3>Pergunta 1: Qual o gênero de filme mais popular?</h3>
 A estratégia usada para medir a popularidade dos gêneros foi a de calcular a proporção entre a quantidade total de avaliações realizadas e quantidade de avaliações referentes ao gênero desejado.
 
-Foi utilizada a técnica de bootstrap para reamostrar a amostra que já temos. Esse passo é necessário para que a distribuição amostral que estamos utilizando reflita mais fortemente a população como um todo, permitindo assim que possamos inferir dados sobre a população. Neste caso foram realizadas 1000 reamostragens a partir da amostra inicial. Obs: Foi utilizado uma amostra inicial de 1000 observações, uma vez que os dados originais são _MUITO_ grandes o que deixaria inviável o bootstrap.
+Foi utilizada a técnica de bootstrap para reamostrar a amostra que já temos. Esse passo é necessário para que a distribuição amostral que estamos utilizando reflita mais fortemente a população como um todo, permitindo assim que possamos inferir dados sobre a população. Neste caso foram realizadas 1000 reamostragens a partir da amostra inicial. Obs: Foi utilizado uma amostra inicial de 1000 observações, uma vez que os dados originais são _MUITO_ grandes o que deixaria inviável o bootstrap. Após explorar e analisar os dados utilizados selecionei os gêneros mais frequentes nos dados, pois seria muito custoso reamostrar e estimar intervalos de confiança para todos os gêneros observados nos dados.
 ```{r}
 
 amostra = sample_n(dados, 1000)
@@ -69,8 +73,8 @@ df %>%
 ```
 Com base na visualização acima fica claro que a estatística calculada não é relevante uma vez que, no nível de significância escolhido, não podemos afirmar nada sobre o gênero mais popular, pois temos três intervalos que se interceptam (*Comédia*, *Drama* e *Ação*). Caso obtivessemos dados de _TODAS_ as análises já realizadas por usuários do movielens(população) qualquer um deles poderia ser o _mais popular_.
 
-<h2>Pergunta 2: Qual o gênero de filme é o melhor?</h2>
-Para responder essa pergunta, vamos utilizar como estatística a média dos ratings dados pelos usuários para cada gênero.
+<h3>Pergunta 2: Qual o gênero de filme é o melhor?</h3>
+Para responder essa pergunta, vamos utilizar como estatística a média dos ratings dados pelos usuários para cada gênero. Mias uma vez iremos utilizar a técnica de bootstrap para reamostrar os dados e aproximar sua distribuição amostral da distribuição real da população.
 
 ```{r}
 
@@ -90,7 +94,7 @@ for (genero in genres) {
 }
 ```
 
-Novamente, com o o bootstrap realizado já podemos gerar os intervalos de confiança e verificar qual o melhor filme:
+Novamente, com o o bootstrap realizado já podemos gerar os intervalos de confiança para a média dos ratings e verificar qual o _melhor_ filme:
 
 ```{r}
 
@@ -102,3 +106,30 @@ df %>%
     labs(title = "Intervalos de confiança para a estatística de melhor fime", x = "Gêneros analisados", y = "Media dos ratings")
 
 ```
+Desta vez obtivemos um resultado mais interessante, *TODOS* os intervalos gerados para os gêneros escolhidos se interceptam. Ou seja, neste nivel de significância não podemos afirmar nada sobre qual o melhor gênero. Na verdade, qualquer um deles poderia ser o _melhor_ uma vez que todos os intervalos se interceptam.
+
+<h2>Teste de hipótese</h2>
+Agora responderemos as mesmas duas perguntas anteriores utilizando a técnica de teste de hipótese e estimação de p-valor.
+
+<h3>Pergunta 1: Qual o gênero de filme mais popular?</h3>
+Já que não vamos fazer bootstrap, podemos trabalhar com um amostra maior, 100 mil observações.
+```{r}
+
+amostra = sample_n(dados, 100000) %>% filter(genre %in% genres) %>% group_by(genre)
+
+```
+
+Usando a função count da biblioteca plyr (<3) podemos saber quantas avaliações os usuários deram para cada gênero. E com essa informações podemos calcular também a  proporção do número de avaliações de cada gênero com relação ao número total de avaliações.
+
+```{r}
+count_genres <- plyr::count(amostra, 'genre') %>% mutate(prop = freq / (sum(freq)))
+```
+
+Agora podemos guardar as diferenças observadas na nossa amostra.
+
+```{r}
+count_genres.diff = diff(count_genres$prop)
+```
+
+
+
