@@ -1,0 +1,104 @@
+---
+title: "lab4-cp3"
+date: "28 de julho de 2017"
+output: html_document
+---
+
+#Analisando a popularidade de filmes
+Nesta análise iremos explorar e analisar uma *amostra* de dados sobre ratings de filmes no site movielens. Cada observação dos dados corresponde a uma nota dada por um usuário do site para um certo filme e contém as seguintes variáveis.
+
+_rating_: Rating dado por um usuário para o filme em questão.<br>
+_genre_: Gênero do filme.<br>
+_title_: Título do filme.<br>
+
+Logo abaixo temos a leitura/filtragem dos dados e importação de bibliotecas que utilizarei nessa análise.  
+
+```{r}
+
+library('tidyverse')
+library('boot')
+library('resample')
+library('ggplot2')
+library('plotly')
+library('GGally')
+library('splitstackshape')
+
+movies = read_csv('dados/movies.csv') %>% filter(complete.cases(.))
+ratings = read_csv('dados/ratings.csv') %>% filter(complete.cases(.))
+dados = full_join(ratings, movies, by = "movieId")
+
+dados <- cSplit(dados, "genres", "|", "long") %>% mutate(genre = genres) %>% select(-timestamp, -movieId, -userId, -genres)
+```
+
+Com base nesses dados, vamos responder duas perguntas, a primeira delas é:
+
+<h2>Pergunta 1: Qual o gênero de filme mais popular?</h2>
+A estratégia usada para medir a popularidade dos gêneros foi a de calcular a proporção entre a quantidade total de avaliações realizadas e quantidade de avaliações referentes ao gênero desejado.
+
+Foi utilizada a técnica de bootstrap para reamostrar a amostra que já temos. Esse passo é necessário para que a distribuição amostral que estamos utilizando reflita mais fortemente a população como um todo, permitindo assim que possamos inferir dados sobre a população. Neste caso foram realizadas 1000 reamostragens a partir da amostra inicial. Obs: Foi utilizado uma amostra inicial de 1000 observações, uma vez que os dados originais são _MUITO_ grandes o que deixaria inviável o bootstrap.
+```{r}
+
+amostra = sample_n(dados, 1000)
+genres = c("Action", "Adventure", "Animation", "Comedy", "Drama", "Fantasy", "Horror", "Romance", "Sci-Fi")
+pops = c()
+
+for (genero in genres) {
+  
+  pop <- function(x, i){
+    d = x[i,]
+    proportion = length((d %>% filter(genre == genero))$genre) / length(d$genre)
+    return(proportion)
+  }
+  
+  boot_genre = bootstrap(amostra, pop, R = 1000)
+  popularity_genre = CI.bca(boot_genre, c = probs(.025, .975))
+  pops = rbind(pops, popularity_genre)
+}
+```
+
+Com o bootstrap realizado podemos calcular os intervalos de confiança para a estatística que criamos e descobrir qual o gênero de filmes mais popular. A visualização abaixo mostra os intervalos de confiança descobertos:
+
+```{r}
+df = data.frame(rbind(pops))
+df$medida = rownames(df)
+df %>% 
+  ggplot(aes(x = genres, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2) + 
+    labs(title = "Intervalos de confiança para a estatística popularidade", x = "Gêneros analisados", y = "Popularidade", subtitle = "Obs: popularidade = Número de avaliações do gênero / Número total de avaliações")
+
+```
+Com base na visualização acima fica claro que a estatística calculada não é relevante uma vez que, no nível de significância escolhido, não podemos afirmar nada sobre o gênero mais popular, pois temos três intervalos que se interceptam (*Comédia*, *Drama* e *Ação*). Caso obtivessemos dados de _TODAS_ as análises já realizadas por usuários do movielens(população) qualquer um deles poderia ser o _mais popular_.
+
+<h2>Pergunta 2: Qual o gênero de filme é o melhor?</h2>
+Para responder essa pergunta, vamos utilizar como estatística a média dos ratings dados pelos usuários para cada gênero.
+
+```{r}
+
+bests = c()
+
+for (genero in genres) {
+  
+  best <- function(x, i){
+    d = x[i,]
+    media = mean((d %>% filter(genre == genero))$rating)
+    return(media)
+  }
+  
+  boot_genre = bootstrap(amostra, best, R = 1000)
+  best_genre = CI.percentile(boot_genre, c = probs(.025, .975))
+  bests = rbind(bests, best_genre)
+}
+```
+
+Novamente, com o o bootstrap realizado já podemos gerar os intervalos de confiança e verificar qual o melhor filme:
+
+```{r}
+
+df = data.frame(rbind(bests))
+df$medida = rownames(df)
+df %>% 
+  ggplot(aes(x = genres, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2) + 
+    labs(title = "Intervalos de confiança para a estatística de melhor fime", x = "Gêneros analisados", y = "Media dos ratings")
+
+```
