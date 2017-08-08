@@ -29,7 +29,12 @@ movies = read_csv('dados/movies.csv') %>% filter(complete.cases(.))
 ratings = read_csv('dados/ratings.csv') %>% filter(complete.cases(.))
 dados = full_join(ratings, movies, by = "movieId")
 
-dados <- cSplit(dados, "genres", "|", "long") %>% mutate(genre = genres) %>% select(-timestamp, -movieId, -userId, -genres)
+dados <- cSplit(dados, "genres", "|", "long") %>% mutate(genre = genres) %>% select(-timestamp, -movieId, -userId, -genres) 
+dados <- dados %>% filter(complete.cases(.))
+
+i = sapply(dados, is.factor)
+dados[i] <- lapply(dados[i], as.character)
+
 ```
 
 <h2>Intervalos de confiança</h2>
@@ -113,7 +118,7 @@ Desta vez obtivemos um resultado mais interessante, *TODOS* os intervalos gerado
 Agora responderemos as mesmas duas perguntas anteriores utilizando a técnica de teste de hipótese e estimação de p-valor.
 
 <h3>Pergunta 1: Qual o gênero de filme mais popular?</h3>
-Já que não vamos fazer bootstrap, podemos trabalhar com um amostra maior, 100 mil observações.
+Já que não vamos fazer bootstrap, podemos trabalhar com um amostra maior, 100 mil observações. Pelos intervalos de confiança que calculamos sabemos que três gêneros podem ser os mais populares. Vamos focar apenas em *Comédia* e *Drama*. Nossa hipótese nula será: *Existe uma diferença significativa entra as popularidades dos filmes de Comédia e Drama?*
 ```{r}
 
 amostra = sample_n(dados, 100000) %>% filter(genre %in% genres) %>% group_by(genre)
@@ -126,36 +131,31 @@ Usando a função count da biblioteca plyr (<3) podemos saber quantas avaliaçõ
 count_genres <- plyr::count(amostra, 'genre') %>% mutate(prop = freq / (sum(freq)))
 ```
 
-Agora podemos guardar as diferenças observadas na nossa amostra.
+Agora podemos guardar a diferença observada entre os gêneros de Comédia e Drama.
 
 ```{r}
-count_genres.diff = diff(count_genres$prop)
 
+diff_comedy_drama = count_genres[5,3] - count_genres[4,3]
 
-set.seed(1)
+set.seed(123)
 diffs = replicate(1000, {
 
-  amostra = amostra %>% 
-    mutate(id_embaralhado = sample(genre, n())) %>% 
-    group_by(id_embaralhado)
+  amostra2 = sample_n(dados, 100000) %>% filter(genre %in% genres)
   
   
-  count_genres_2 <- plyr::count(amostra, 'genre') %>% mutate(prop = freq / (sum(freq)))
+  count_genres_2 <- plyr::count(amostra2, 'genre') %>% mutate(prop = freq / (sum(freq)))
   
   
-  return(count_genres_2$prop[1] - count_genres_2$prop[4]) #acao e comedia
+  return(count_genres_2[5,3] - count_genres_2[4,3]) # comedia e drama
 })
-
-
-glimpse(diffs)
 
 tibble(diferenca = diffs) %>% 
   ggplot(aes(x = diferenca)) + 
   geom_histogram(bins = 30) + 
-  geom_vline(xintercept = count_genres$prop[1] - count_genres$prop[4])
+  geom_vline(xintercept = diff_comedy_drama, color="orange")
 
 # p-valor!
-sum(abs(diffs) >= abs(diff.media.observada.1x4)) / length(diffs)
+sum(abs(diffs) >= abs(diff_comedy_drama)) / length(diffs)
 
 
 
@@ -165,6 +165,8 @@ sum(abs(diffs) >= abs(diff.media.observada.1x4)) / length(diffs)
 Assim como com intervalos de confiança, a estatítica que utilizaremos é a media.
 
 ```{r}
+amostra = sample_n(dados, 100000) %>% filter(genre %in% c("Comedy", "Drama")) %>% group_by(genre)
+
 permutationTest2(data = amostra, statistic = mean(rating), treatment = genre)
 ```
 
