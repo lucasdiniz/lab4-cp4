@@ -14,10 +14,9 @@ _title_: Título do filme.<br>
 
 Logo abaixo temos a leitura/filtragem dos dados e importação de bibliotecas que utilizarei nessa análise.  
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 library('tidyverse')
-library('coin')
 library('boot')
 library('resample')
 library('ggplot2')
@@ -46,7 +45,7 @@ Com base nesses dados, vamos responder duas perguntas, a primeira delas é:
 A estratégia usada para medir a popularidade dos gêneros foi a de calcular a proporção entre a quantidade total de avaliações realizadas e quantidade de avaliações referentes ao gênero desejado.
 
 Foi utilizada a técnica de bootstrap para reamostrar a amostra que já temos. Esse passo é necessário para que a distribuição amostral que estamos utilizando reflita mais fortemente a população como um todo, permitindo assim que possamos inferir dados sobre a população. Neste caso foram realizadas 1000 reamostragens a partir da amostra inicial. Obs: Foi utilizado uma amostra inicial de 1000 observações, uma vez que os dados originais são _MUITO_ grandes o que deixaria inviável o bootstrap. Após explorar e analisar os dados utilizados selecionei os gêneros mais frequentes nos dados, pois seria muito custoso reamostrar e estimar intervalos de confiança para todos os gêneros observados nos dados.
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 amostra = sample_n(dados, 1000)
 genres = c("Action", "Adventure", "Animation", "Comedy", "Drama", "Fantasy", "Horror", "Romance", "Sci-Fi")
@@ -77,12 +76,12 @@ df %>%
     labs(title = "Intervalos de confiança para a estatística popularidade", x = "Gêneros analisados", y = "Popularidade", subtitle = "Obs: popularidade = Número de avaliações do gênero / Número total de avaliações")
 
 ```
-Com base na visualização acima fica claro que a estatística calculada não é relevante uma vez que, no nível de significância escolhido, não podemos afirmar nada sobre o gênero mais popular, pois temos três intervalos que se interceptam (*Comédia*, *Drama* e *Ação*). Caso obtivessemos dados de _TODAS_ as análises já realizadas por usuários do movielens(população) qualquer um deles poderia ser o _mais popular_.
+Com base na visualização acima fica claro que a estatística calculada não é relevante uma vez que, no nível de significância escolhido, não podemos afirmar nada sobre o gênero mais popular, pois temos qus os dois "maiores" intervalos se interceptam (*Comédia* e *Drama*). Caso obtivessemos dados de _TODAS_ as análises já realizadas por usuários do movielens(população) qualquer um desses dois gêneros poderia vir a ser o _mais popular_.
 
 <h3>Pergunta 2: Qual o gênero de filme é o melhor?</h3>
 Para responder essa pergunta, vamos utilizar como estatística a média dos ratings dados pelos usuários para cada gênero. Mias uma vez iremos utilizar a técnica de bootstrap para reamostrar os dados e aproximar sua distribuição amostral da distribuição real da população.
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 bests = c()
 
@@ -102,7 +101,7 @@ for (genero in genres) {
 
 Novamente, com o o bootstrap realizado já podemos gerar os intervalos de confiança para a média dos ratings e verificar qual o _melhor_ filme:
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 df = data.frame(rbind(bests))
 df$medida = rownames(df)
@@ -112,61 +111,30 @@ df %>%
     labs(title = "Intervalos de confiança para a estatística de melhor fime", x = "Gêneros analisados", y = "Media dos ratings")
 
 ```
-Desta vez obtivemos um resultado mais interessante, *TODOS* os intervalos gerados para os gêneros escolhidos se interceptam. Ou seja, neste nivel de significância não podemos afirmar nada sobre qual o melhor gênero. Na verdade, qualquer um deles poderia ser o _melhor_ uma vez que todos os intervalos se interceptam.
+Desta vez obtivemos um resultado mais interessante, *TODOS* os intervalos gerados para as médias dos gêneros escolhidos se interceptam. Ou seja, neste nivel de significância não podemos afirmar nada sobre qual o melhor gênero. Na verdade, qualquer um deles poderia ser o _melhor_ uma vez que todos os intervalos se interceptam.
 
 <h2>Teste de hipótese</h2>
-Agora responderemos as mesmas duas perguntas anteriores utilizando a técnica de teste de hipótese e estimação de p-valor.
+Agora responderemos a nossa segunda pergunta utilizando a técnica de teste de hipótese e estimação de p-valor, e iremos comparar com os resultados obtidos via intervalo de confiança. Assim como com intervalos de confiança, a estatítica que utilizaremos é a media.
 
-<h3>Pergunta 1: Qual o gênero de filme mais popular?</h3>
-Já que não vamos fazer bootstrap, podemos trabalhar com um amostra maior, 100 mil observações. Pelos intervalos de confiança que calculamos sabemos que três gêneros podem ser os mais populares. Vamos focar apenas em *Comédia* e *Drama*. Nossa hipótese nula será: *Existe uma diferença significativa entra as popularidades dos filmes de Comédia e Drama?*
-```{r}
+Com base no que observamos nos intervalos de confiança nossa hipótese é que *existe uma diferença significativa* entre as médias dos ratings dos gêneros aqui analisados (Drama e Comédia). Vamos realizar um teste de permutação e observar o resultado que obtemos.
 
-amostra = sample_n(dados, 100000) %>% filter(genre %in% genres) %>% group_by(genre)
-
-```
-
-Usando a função count da biblioteca plyr (<3) podemos saber quantas avaliações os usuários deram para cada gênero. E com essa informações podemos calcular também a  proporção do número de avaliações de cada gênero com relação ao número total de avaliações.
-
-```{r}
-count_genres <- plyr::count(amostra, 'genre') %>% mutate(prop = freq / (sum(freq)))
-```
-
-Agora podemos guardar a diferença observada entre os gêneros de Comédia e Drama.
-
-```{r}
-
-diff_comedy_drama = count_genres[5,3] - count_genres[4,3]
-
-set.seed(123)
-diffs = replicate(1000, {
-
-  amostra2 = sample_n(dados, 100000) %>% filter(genre %in% genres)
-  
-  
-  count_genres_2 <- plyr::count(amostra2, 'genre') %>% mutate(prop = freq / (sum(freq)))
-  
-  
-  return(count_genres_2[5,3] - count_genres_2[4,3]) # comedia e drama
-})
-
-tibble(diferenca = diffs) %>% 
-  ggplot(aes(x = diferenca)) + 
-  geom_histogram(bins = 30) + 
-  geom_vline(xintercept = diff_comedy_drama, color="orange")
-
-# p-valor!
-sum(abs(diffs) >= abs(diff_comedy_drama)) / length(diffs)
-
-
-
-```
-
-<h3>Pergunta 2: Qual o gênero de filme é o melhor?</h3>
-Assim como com intervalos de confiança, a estatítica que utilizaremos é a media.
-
-```{r}
+```{r, message=FALSE, warning=FALSE}
 amostra = sample_n(dados, 100000) %>% filter(genre %in% c("Comedy", "Drama")) %>% group_by(genre)
 
 permutationTest2(data = amostra, statistic = mean(rating), treatment = genre)
 ```
+<h2>Conclusões obtidas</h2>
 
+Nesse caso, a hipótese nula é que *não existe uma diferença significativa*. Contudo, como obtivemos um *p-valor <= 0.5* podemos *rejeitar* a hipótese nula e num nível de significância de 1% podemos afirmar que *existe uma diferença significativa* entre as médias dos dois gêneros.  
+
+E tendo em mente o p-valor obtido e o valor observado *negativo* da estatística _media(comedia) - media(drama)_ podemos afirmar ainda que o gênero *Comédia é significativamente mais popular do que o gênero Drama!*. Yay! 
+
+<h3>Sobre p-valor</h3>
+O p-valor funciona como uma probabilidade, a probabilidade de que, dado que a hipótese nula é verdadeira, sejam obtidos valores semelhantes àquele que foi observado. Se obtivermos um p-valor muito alto teríamos muitos valores semelhantes ao que foi observado inicialmente *num mundo em que a hipótese nula é verdadeira!* Ou seja não seria possível relacionar o valor observado com a nossa hipótese uma vez que muitos valores semelhantes acontecem até mesmo num mundo em que a hipótese contrária a nossa é verdadeira.
+
+<h3>Sobre intervalos de confiança e Testes de Hipótese</h3>
+No resultado obtido anteriormente com intervalos de confiança para a média não conseguimos concluir nada, pois os intervalos se interceptavam. Porém nesse teste de hipótese estamos tratando com a *diferença das médias* e dessa vez sim, conseguimos afirmar algumas coisa com o resultado obtido, pois temos liberdade para formular e testar a hipótese que bem entedermos. Isso nos mostra uma diferença fundamental entre as duas metodologias:
+
+*Intervalos de confiança:* São ótimos para estimar a magnitude alguma estatística, no nosso caso a média. Não muito útil para testar afirmações pontuais.
+
+*Testes de hipótese:* São ótimos para aceitar/rejeitar alguma afirmação pontual, no nosso caso a afirmação de que existe diferença entre as médias.
